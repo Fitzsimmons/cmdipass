@@ -5,9 +5,9 @@ use docopt::Docopt;
 extern crate hyper;
 use hyper::Client;
 use hyper::header::{Headers, ContentType, Accept};
-use hyper::mime::{Mime, TopLevel, SubLevel};
 
-extern crate base64;
+extern crate rand;
+use rand::{ Rng, OsRng };
 
 #[macro_use]
 extern crate serde_derive;
@@ -20,12 +20,7 @@ use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::error::Error;
 
-extern crate rand;
-use rand::{ Rng, OsRng };
-
-extern crate crypto;
-use crypto::{ symmetriccipher, buffer, aes, blockmodes };
-use crypto::buffer::{ ReadBuffer, WriteBuffer, BufferResult };
+mod keepasshttp;
 
 const VERSION: &'static str = "0.1.0";
 const USAGE: &'static str = "
@@ -54,140 +49,6 @@ struct Config {
     id: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct TestAssociateRequest {
-    #[serde(rename = "Nonce")]
-    nonce: String,
-
-    #[serde(rename = "Verifier")]
-    verifier: String,
-
-    #[serde(rename = "RequestType")]
-    request_type: String,
-
-    #[serde(rename = "TriggerUnlock")]
-    trigger_unlock: bool,
-
-    #[serde(rename = "Id")]
-    id: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct TestAssociateResponse {
-    #[serde(rename = "Success")]
-    success: bool,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct AssociateRequest {
-    #[serde(rename = "RequestType")]
-    request_type: String,
-
-    #[serde(rename = "Key")]
-    key: String,
-
-    #[serde(rename = "Nonce")]
-    nonce: String,
-
-    #[serde(rename = "Verifier")]
-    verifier: String,
-}
-
-impl AssociateRequest {
-    fn new() -> AssociateRequest {
-        let mut key: [u8; 32] = [0; 32];
-        let mut nonce: [u8; 16] = [0; 16];
-        let mut rng = OsRng::new().ok().unwrap();
-        rng.fill_bytes(&mut key);
-        rng.fill_bytes(&mut nonce);
-
-        let nonce_b64 = base64::encode(&nonce);
-
-        AssociateRequest {
-            request_type: String::from("associate"),
-            key: base64::encode(&key),
-            nonce: base64::encode(&nonce),
-            verifier: base64::encode(encrypt(nonce_b64.as_bytes(), &key, &nonce).unwrap().as_slice()),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct AssociateResponse {
-    #[serde(rename = "Success")]
-    success: bool,
-
-    #[serde(rename = "Id")]
-    id: Option<String>,
-}
-
-// Copied verbatim from the rust-crypto sample code, which coincidentally is exactly what we need
-// https://github.com/DaGenix/rust-crypto/blob/master/examples/symmetriccipher.rs
-fn encrypt(data: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>, symmetriccipher::SymmetricCipherError> {
-    let mut encryptor = aes::cbc_encryptor(aes::KeySize::KeySize256, key, iv, blockmodes::PkcsPadding);
-
-    let mut final_result = Vec::<u8>::new();
-    let mut read_buffer = buffer::RefReadBuffer::new(data);
-    let mut buffer = [0; 4096];
-    let mut write_buffer = buffer::RefWriteBuffer::new(&mut buffer);
-
-    loop {
-        let result = try!(encryptor.encrypt(&mut read_buffer, &mut write_buffer, true));
-        final_result.extend(write_buffer.take_read_buffer().take_remaining().iter().map(|&i| i));
-
-        match result {
-            BufferResult::BufferUnderflow => break,
-            BufferResult::BufferOverflow => { }
-        }
-    }
-
-    Ok(final_result)
-}
-
-fn decrypt(encrypted_data: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>, symmetriccipher::SymmetricCipherError> {
-    let mut decryptor = aes::cbc_decryptor(
-            aes::KeySize::KeySize256,
-            key,
-            iv,
-            blockmodes::PkcsPadding);
-
-    let mut final_result = Vec::<u8>::new();
-    let mut read_buffer = buffer::RefReadBuffer::new(encrypted_data);
-    let mut buffer = [0; 4096];
-    let mut write_buffer = buffer::RefWriteBuffer::new(&mut buffer);
-
-    loop {
-        let result = try!(decryptor.decrypt(&mut read_buffer, &mut write_buffer, true));
-        final_result.extend(write_buffer.take_read_buffer().take_remaining().iter().map(|&i| i));
-        match result {
-            BufferResult::BufferUnderflow => break,
-            BufferResult::BufferOverflow => { }
-        }
-    }
-
-    Ok(final_result)
-}
-
-fn test_associate() -> String {
-    let mut key: [u8; 32] = [0; 32];
-    let mut nonce: [u8; 16] = [0; 16];
-    let mut rng = OsRng::new().ok().unwrap();
-    rng.fill_bytes(&mut key);
-    rng.fill_bytes(&mut nonce);
-
-    let verifier = encrypt(&nonce, &key, &nonce).unwrap();
-
-    let req = TestAssociateRequest {
-        nonce: base64::encode(&nonce),
-        verifier: base64::encode(&verifier),
-        request_type: String::from("test-associate"),
-        trigger_unlock: false,
-        id: String::from("PHP"),
-    };
-
-    serde_json::to_string(&req).unwrap()
-}
-
 fn config_path() -> PathBuf {
     env::var("CMDIPASS_CONFIG").map(|e| PathBuf::from(e)).unwrap_or_else(|_| {
         let mut pathbuf = env::home_dir().unwrap_or(PathBuf::from(""));
@@ -210,7 +71,7 @@ fn load_config() -> io::Result<Config> {
     Ok(config)
 }
 
-fn write_config_file(request: &AssociateRequest, response: &AssociateResponse) {
+fn write_config_file(request: &keepasshttp::AssociateRequest, response: &keepasshttp::AssociateResponse) {
     let config = Config {
         key: request.key.to_owned(),
         id: response.id.to_owned().unwrap(),
@@ -219,12 +80,33 @@ fn write_config_file(request: &AssociateRequest, response: &AssociateResponse) {
     file.write_all(serde_json::to_string(&config).unwrap().as_bytes()).unwrap();
 }
 
-fn associate() {
-    println!("Config file not found at '{}', generating new key and registering with server", config_path().to_string_lossy());
+// fn test_associate() -> String {
+//     let mut key: [u8; 32] = [0; 32];
+//     let mut nonce: [u8; 16] = [0; 16];
+//     let mut rng = OsRng::new().ok().unwrap();
+//     rng.fill_bytes(&mut key);
+//     rng.fill_bytes(&mut nonce);
 
-    let associate_request = AssociateRequest::new();
+//     let verifier = keepasshttp::crypto::encrypt(&nonce, &key, &nonce).unwrap();
+
+//     let req = TestAssociateRequest {
+//         nonce: base64::encode(&nonce),
+//         verifier: base64::encode(&verifier),
+//         request_type: String::from("test-associate"),
+//         trigger_unlock: false,
+//         id: String::from("PHP"),
+//     };
+
+//     serde_json::to_string(&req).unwrap()
+// }
+
+fn associate() {
+    writeln!(io::stderr(), "Config file not found at '{}', generating new key and registering with server", config_path().to_string_lossy()).unwrap();
+
+    let associate_request = keepasshttp::AssociateRequest::new();
     let body = serde_json::to_string(&associate_request).unwrap();
     println!("{}", body);
+    let client = Client::new();
     let mut res = client.post("http://localhost:19455").
         header(ContentType::json()).
         header(Accept::json()).
@@ -235,7 +117,7 @@ fn associate() {
     let mut buf = String::new();
     res.read_to_string(&mut buf).unwrap();
 
-    let associate_response: AssociateResponse = serde_json::from_str(buf.as_str()).unwrap();
+    let associate_response: keepasshttp::AssociateResponse = serde_json::from_str(buf.as_str()).unwrap();
 
     match associate_response.success {
         true => write_config_file(&associate_request, &associate_response),
@@ -245,6 +127,7 @@ fn associate() {
         }
     }
 }
+
 
 fn main() {
     let args: Args = Docopt::new(USAGE).and_then(|d| d.decode()).unwrap_or_else(|e| e.exit());
