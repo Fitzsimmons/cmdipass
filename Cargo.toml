@@ -1,0 +1,15 @@
+[package]
+name = "cmdipass"
+version = "0.1.0"
+authors = ["Justin Fitzsimmons <justinf@nulogy.com>"]
+
+[dependencies]
+docopt = "0.7"
+rustc-serialize = "0.3"
+hyper = "0.10.4"
+rust-crypto = "^0.2"
+base64 = "~0.3.0"
+rand = "0.3.15"
+serde = "0.9"
+serde_derive = "0.9"
+serde_json = "0.9"
