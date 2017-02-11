@@ -79,14 +79,18 @@ fn main() {
         process::exit(0);
     }
 
-    if !config_exists() {
-        writeln!(io::stderr(), "Config file not found at '{}', generating new key and registering with server", config_path().to_string_lossy()).unwrap();
-        match keepasshttp::associate() {
-            Ok(config) => write_config_file(&config),
-            Err(e) => {
-                writeln!(io::stderr(), "{}", e);
+    match config_exists() {
+        true => {
+            let config = load_config().unwrap();
+            let success = keepasshttp::test_associate(&config);
+            if !success {
+                writeln!(io::stderr(), "Config rejected by keepasshttp. Make sure that the correct database is open, or delete your config file ({}) and re-associate", config_path().to_string_lossy()).unwrap();
                 process::exit(1);
             }
+        },
+        false => {
+            writeln!(io::stderr(), "Config file not found at '{}', generating new key and registering with server", config_path().to_string_lossy()).unwrap();
+            write_config_file(&keepasshttp::associate().unwrap());
         }
     }
 }
