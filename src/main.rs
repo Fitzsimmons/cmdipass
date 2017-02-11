@@ -33,8 +33,8 @@ struct Args {
     cmd_get: bool,
     flag_version: bool,
     flag_help: bool,
-    arg_search_string: Option<String>,
-    arg_index: Option<String>,
+    arg_search_string: String,
+    arg_index: Option<u8>,
     flag_password_only: bool,
     flag_username_only: bool
 }
@@ -87,10 +87,13 @@ fn main() {
                 writeln!(io::stderr(), "Config rejected by keepasshttp. Make sure that the correct database is open, or delete your config file ({}) and re-associate", config_path().to_string_lossy()).unwrap();
                 process::exit(1);
             }
+            let entries = keepasshttp::get_logins(&config, &args.arg_search_string);
+            println!("{:?}", entries);
         },
         false => {
             writeln!(io::stderr(), "Config file not found at '{}', generating new key and registering with server", config_path().to_string_lossy()).unwrap();
             write_config_file(&keepasshttp::associate().unwrap());
+            writeln!(io::stderr(), "Config file written. Re-run this command").unwrap();
         }
     }
 }
