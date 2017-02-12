@@ -2,17 +2,13 @@ extern crate rustc_serialize;
 extern crate docopt;
 use docopt::Docopt;
 
-extern crate rand;
-use rand::{ Rng, OsRng };
-
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
 
 use std::{process, env};
 use std::io::{self, Read, Write};
-use std::io::prelude::*;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::fs::File;
 use std::error::Error;
 
@@ -69,14 +65,14 @@ fn write_config_file(config: &keepasshttp::Config) {
 
 fn handle_entries(result: &Result<Vec<keepasshttp::Entry>, String>, args: &Args) {
     let entries = result.as_ref().unwrap_or_else(|e| {
-        writeln!(io::stderr(), "Error - Server said: '{}'", e);
+        writeln!(io::stderr(), "Error - Server said: '{}'", e).unwrap();
         process::exit(1);
     });
 
     match args.arg_index {
         Some(index) => {
             let entry = &entries.get(index as usize).unwrap_or_else(|| {
-                writeln!(io::stderr(), "Results did not contain an entry at index {}", index);
+                writeln!(io::stderr(), "Results did not contain an entry at index {}", index).unwrap();
                 process::exit(1);
             });
 

@@ -9,10 +9,9 @@ extern crate serde_json;
 
 extern crate hyper;
 use self::hyper::Client;
-use self::hyper::header::{Headers, ContentType, Accept};
+use self::hyper::header::{ContentType, Accept};
 
-use std::io::{self, Read, Write};
-use std::io::prelude::*;
+use std::io::Read;
 use std::fmt;
 
 #[derive(Serialize, Debug)]
