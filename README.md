@@ -56,3 +56,7 @@ Then, just clone the repo and run `cargo build` from the root of the repo. Your 
 ## Contributing
 
 Happy to accept issues and pull requests.
+
+## Contact
+
+Chat with me on keybase or one of the other accounts I've verified: https://keybase.io/jsfitzsimmons/
