@@ -5,6 +5,7 @@ use self::rand::{ Rng, OsRng };
 
 extern crate base64;
 
+extern crate serde;
 extern crate serde_json;
 
 extern crate hyper;
@@ -24,9 +25,6 @@ struct TestAssociateRequest {
 
     #[serde(rename = "RequestType")]
     request_type: String,
-
-    // #[serde(rename = "TriggerUnlock")]
-    // trigger_unlock: bool,
 
     #[serde(rename = "Id")]
     id: String,
@@ -58,22 +56,7 @@ struct TestAssociateResponse {
 
 pub fn test_associate(config: &Config) -> bool {
     let req = TestAssociateRequest::new(config);
-    let body = serde_json::to_string(&req).unwrap();
-    // println!("{}", body); // TODO debug output
-
-    let client = Client::new();
-    let mut res = client.post("http://localhost:19455").
-        header(ContentType::json()).
-        header(Accept::json()).
-        body(body.as_str()).
-        send().
-        unwrap();
-
-    let mut buf = String::new();
-    res.read_to_string(&mut buf).unwrap();
-
-    // println!("{}", buf); // TODO debug output
-    let test_associate_response: TestAssociateResponse = serde_json::from_str(buf.as_str()).unwrap();
+    let test_associate_response: TestAssociateResponse = request(&req);
     test_associate_response.success
 }
 
@@ -122,20 +105,7 @@ pub struct AssociateResponse {
 
 pub fn associate() -> Result<Config, String> {
     let associate_request = AssociateRequest::new();
-    let body = serde_json::to_string(&associate_request).unwrap();
-    // println!("{}", body); // TODO: figure out how to do debug output properly
-    let client = Client::new();
-    let mut res = client.post("http://localhost:19455").
-        header(ContentType::json()).
-        header(Accept::json()).
-        body(body.as_str()).
-        send().
-        unwrap();
-
-    let mut buf = String::new();
-    res.read_to_string(&mut buf).unwrap();
-
-    let associate_response: AssociateResponse = serde_json::from_str(buf.as_str()).unwrap();
+    let associate_response: AssociateResponse = request(&associate_request);
 
     match associate_response.success {
         true => Ok(Config { key: associate_request.key.to_owned(), id: associate_response.id.unwrap().to_owned() }),
@@ -229,20 +199,7 @@ impl RawEntry {
 
 pub fn get_logins<T: AsRef<str>>(config: &Config, url: T) -> Result<Vec<Entry>, String> {
     let get_logins_request = GetLoginsRequest::new(config, url);
-    let body = serde_json::to_string(&get_logins_request).unwrap();
-    // println!("{}", body); // TODO: figure out how to do debug output properly
-    let client = Client::new();
-    let mut res = client.post("http://localhost:19455").
-        header(ContentType::json()).
-        header(Accept::json()).
-        body(body.as_str()).
-        send().
-        unwrap();
-
-    let mut buf = String::new();
-    res.read_to_string(&mut buf).unwrap();
-
-    let get_logins_response: GetLoginsResponse = serde_json::from_str(buf.as_str()).unwrap();
+    let get_logins_response: GetLoginsResponse = request(&get_logins_request);
 
     match get_logins_response.success {
         true => {
@@ -269,4 +226,21 @@ impl fmt::Display for Entry {
 pub struct Config {
     pub key: String,
     pub id: String,
+}
+
+fn request<Req: serde::Serialize, Resp: serde::Deserialize>(request: &Req) -> Resp {
+    let body = serde_json::to_string(&request).unwrap();
+    let client = Client::new();
+    let mut res = client.post("http://localhost:19455").
+        header(ContentType::json()).
+        header(Accept::json()).
+        body(body.as_str()).
+        send().
+        unwrap();
+
+    let mut buf = String::new();
+    res.read_to_string(&mut buf).unwrap();
+
+    let response: Resp = serde_json::from_str(buf.as_str()).unwrap();
+    response
 }
