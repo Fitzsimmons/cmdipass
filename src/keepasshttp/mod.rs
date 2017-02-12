@@ -13,6 +13,7 @@ use self::hyper::header::{Headers, ContentType, Accept};
 
 use std::io::{self, Read, Write};
 use std::io::prelude::*;
+use std::fmt;
 
 #[derive(Serialize, Debug)]
 struct TestAssociateRequest {
@@ -196,22 +197,38 @@ struct GetLoginsResponse {
     success: bool,
 
     #[serde(rename = "Error")]
-    error: Option<String>
+    error: Option<String>,
+
+    #[serde(rename = "Nonce")]
+    nonce: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct RawEntry {
     #[serde(rename = "Login")]
-    pub login: String,
+    login: String,
 
     #[serde(rename = "Name")]
-    pub name: String,
+    name: String,
 
     #[serde(rename = "Password")]
-    pub password: String,
+    password: String,
 }
 
-pub fn get_logins<T: AsRef<str>>(config: &Config, url: T) -> Result<Vec<RawEntry>, String> {
+impl RawEntry {
+    pub fn decrypt<T: AsRef<str>, U: AsRef<str>>(&self, key_b64: T, iv_b64: U) -> Entry {
+        let key = base64::decode(key_b64.as_ref()).unwrap();
+        let iv = base64::decode(iv_b64.as_ref()).unwrap();
+
+        Entry {
+            login: String::from_utf8_lossy(&kphcrypto::decrypt(base64::decode(&self.login).unwrap().as_slice(), &key, &iv).unwrap()).into_owned(),
+            name: String::from_utf8_lossy(&kphcrypto::decrypt(base64::decode(&self.name).unwrap().as_slice(), &key, &iv).unwrap()).into_owned(),
+            password: String::from_utf8_lossy(&kphcrypto::decrypt(base64::decode(&self.password).unwrap().as_slice(), &key, &iv).unwrap()).into_owned(),
+        }
+    }
+}
+
+pub fn get_logins<T: AsRef<str>>(config: &Config, url: T) -> Result<Vec<Entry>, String> {
     let get_logins_request = GetLoginsRequest::new(config, url);
     let body = serde_json::to_string(&get_logins_request).unwrap();
     // println!("{}", body); // TODO: figure out how to do debug output properly
@@ -229,7 +246,9 @@ pub fn get_logins<T: AsRef<str>>(config: &Config, url: T) -> Result<Vec<RawEntry
     let get_logins_response: GetLoginsResponse = serde_json::from_str(buf.as_str()).unwrap();
 
     match get_logins_response.success {
-        true => Ok(get_logins_response.entries.clone()),
+        true => {
+            Ok(get_logins_response.entries.iter().map(|re| re.decrypt(&config.key, &get_logins_response.nonce)).collect())
+        },
         false => Err(format!("Couldn't get logins. Server said: '{}'", get_logins_response.error.unwrap()))
     }
 }
@@ -239,6 +258,12 @@ pub struct Entry {
     pub login: String,
     pub name: String,
     pub password: String,
+}
+
+impl fmt::Display for Entry {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Login: {} || Name: {} || Password: {}", self.login, self.name, self.password)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
