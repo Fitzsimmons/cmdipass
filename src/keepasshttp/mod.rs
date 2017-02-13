@@ -9,11 +9,12 @@ extern crate serde;
 extern crate serde_json;
 
 extern crate hyper;
-use self::hyper::Client;
+use self::hyper::{Client, status};
 use self::hyper::header::{ContentType, Accept};
 
-use std::io::Read;
+use std::io::{self, Read, Write};
 use std::fmt;
+use std::process;
 
 #[derive(Serialize, Debug)]
 struct TestAssociateRequest {
@@ -235,12 +236,22 @@ fn request<Req: serde::Serialize, Resp: serde::Deserialize>(request: &Req) -> Re
         header(ContentType::json()).
         header(Accept::json()).
         body(body.as_str()).
-        send().
-        unwrap();
+        send().unwrap_or_else(|e| {
+            writeln!(io::stderr(), "Error while trying to contact KeePassHttp: {}\nMake sure that KeePass is running and the database is unlocked.", e).unwrap();
+            process::exit(1);
+        });
 
-    let mut buf = String::new();
-    res.read_to_string(&mut buf).unwrap();
+    match res.status {
+        status::StatusCode::Ok => {
+            let mut buf = String::new();
+            res.read_to_string(&mut buf).unwrap();
 
-    let response: Resp = serde_json::from_str(buf.as_str()).unwrap();
-    response
+            let response: Resp = serde_json::from_str(buf.as_str()).unwrap();
+            response
+        },
+        _ => {
+            writeln!(io::stderr(), "Error while trying to contact KeePassHttp: {}\nMake sure that KeePass is running and the database is unlocked.",  res.status).unwrap();
+            process::exit(1);
+        }
+    }
 }
