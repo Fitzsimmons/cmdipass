@@ -6,6 +6,10 @@ use docopt::Docopt;
 extern crate serde_derive;
 extern crate serde_json;
 
+#[macro_use]
+extern crate log;
+extern crate env_logger;
+
 use std::{process, env};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
@@ -105,6 +109,8 @@ fn get(args: &Args) {
 
 fn main() {
     let args: Args = Docopt::new(USAGE).and_then(|d| d.decode()).unwrap_or_else(|e| e.exit());
+
+    env_logger::init().unwrap();
 
     if args.flag_help {
         println!("{}", USAGE);

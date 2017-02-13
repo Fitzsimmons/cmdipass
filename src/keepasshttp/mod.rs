@@ -231,6 +231,7 @@ pub struct Config {
 
 fn request<Req: serde::Serialize, Resp: serde::Deserialize>(request: &Req) -> Resp {
     let body = serde_json::to_string(&request).unwrap();
+    debug!("{}", body);
     let client = Client::new();
     let mut res = client.post("http://localhost:19455").
         header(ContentType::json()).
@@ -241,10 +242,12 @@ fn request<Req: serde::Serialize, Resp: serde::Deserialize>(request: &Req) -> Re
             process::exit(1);
         });
 
+    debug!("{:?}", res);
     match res.status {
         status::StatusCode::Ok => {
             let mut buf = String::new();
             res.read_to_string(&mut buf).unwrap();
+            debug!("{}", buf);
 
             let response: Resp = serde_json::from_str(buf.as_str()).unwrap();
             response
