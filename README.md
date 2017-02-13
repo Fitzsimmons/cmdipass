@@ -20,12 +20,12 @@ master ✔ > history | grep github | tail -n 1
 After:
 ```
 justinf@wyvern:/home/justinf/src/cmdipass
-master ✔ > vault auth -method=github token=$(cmdipass get-one github-token 0 --password-only)
+master ✔ > vault auth -method=github token=$(cmdipass get-one github-token --index=0 --password-only)
 Successfully authenticated! You are now logged in.
 
 justinf@wyvern:/home/justinf/src/cmdipass
 master ✔ > history | grep github | tail -n 1
-10043  vault auth -method=github token=$(cmdipass get-one github-token 0 --password-only)
+10043  vault auth -method=github token=$(cmdipass get-one github-token --index=0 --password-only)
 ```
 
 `cmdipass` uses [KeePassHttp](https://github.com/pfn/keepasshttp) to securely fetch secrets from [KeePass](http://keepass.info/). The first time you execute `cmdipass`, it will attempt to register with KeePassHttp.
