@@ -38,9 +38,17 @@ From then on, you'll get a notification whenever cmdipass is used to look up a v
 
 ```
 cmdipass get <search-string>
-cmdipass get-one <search-string> <index> [--password-only | --username-only]
+cmdipass get-one <search-string> (--index=<index> | --uuid=<uuid>) [--password-only | --username-only]
 cmdipass --version
 cmdipass (-h | --help)
+
+Options:
+  -h --help         Show this screen.
+  --version         Show version.
+  --index=<index>   Select the entry at this 0-indexed location.
+  --uuid=<uuid>     Select the entry with this uuid.
+  --password-only   Print only the password.
+  --username-only   Print only the username.
 ```
 
 ## Downloads

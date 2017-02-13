@@ -183,6 +183,9 @@ pub struct RawEntry {
 
     #[serde(rename = "Password")]
     password: String,
+
+    #[serde(rename = "Uuid")]
+    uuid: String,
 }
 
 impl RawEntry {
@@ -194,6 +197,7 @@ impl RawEntry {
             login: String::from_utf8_lossy(&kphcrypto::decrypt(base64::decode(&self.login).unwrap().as_slice(), &key, &iv).unwrap()).into_owned(),
             name: String::from_utf8_lossy(&kphcrypto::decrypt(base64::decode(&self.name).unwrap().as_slice(), &key, &iv).unwrap()).into_owned(),
             password: String::from_utf8_lossy(&kphcrypto::decrypt(base64::decode(&self.password).unwrap().as_slice(), &key, &iv).unwrap()).into_owned(),
+            uuid: String::from_utf8_lossy(&kphcrypto::decrypt(base64::decode(&self.uuid).unwrap().as_slice(), &key, &iv).unwrap()).into_owned()
         }
     }
 }
@@ -215,11 +219,12 @@ pub struct Entry {
     pub login: String,
     pub name: String,
     pub password: String,
+    pub uuid: String,
 }
 
 impl fmt::Display for Entry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Login: {} || Name: {} || Password: {}", self.login, self.name, self.password)
+        write!(f, "Name: {} || Login: {} || Password: {} || UUID: {}", self.name, self.login, self.password, self.uuid)
     }
 }
 
