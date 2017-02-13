@@ -116,15 +116,10 @@ fn main() {
         process::exit(0);
     }
 
-    match config_exists() {
-        true => {
-            get(&args);
-        },
-        false => {
-            writeln!(io::stderr(), "Config file not found at '{}', generating new key and registering with server", config_path().to_string_lossy()).unwrap();
-            write_config_file(&keepasshttp::associate().unwrap());
-            writeln!(io::stderr(), "Config file written.").unwrap();
-            get(&args);
-        }
+    if !config_exists() {
+        writeln!(io::stderr(), "Config file not found at '{}', generating new key and registering with server", config_path().to_string_lossy()).unwrap();
+        write_config_file(&keepasshttp::associate().unwrap());
+        writeln!(io::stderr(), "Config file written.").unwrap();
     }
+    get(&args);
 }
