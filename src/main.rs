@@ -24,18 +24,28 @@ cmdipass
 
 Usage:
   cmdipass get <search-string>
-  cmdipass get-one <search-string> <index> [--password-only | --username-only]
+  cmdipass get-one <search-string> (--index=<index> | --uuid=<uuid>) [--password-only | --username-only]
   cmdipass --version
   cmdipass (-h | --help)
+
+Options:
+  -h --help         Show this screen.
+  --version         Show version.
+  --index=<index>   Select the entry at this 0-indexed location.
+  --uuid=<uuid>     Select the entry with this uuid.
+  --password-only   Print only the password.
+  --username-only   Print only the username.
 ";
 
 #[derive(Debug, RustcDecodable)]
 struct Args {
     cmd_get: bool,
+    cmd_get_one: bool,
     flag_version: bool,
     flag_help: bool,
     arg_search_string: String,
-    arg_index: Option<u8>,
+    flag_index: Option<usize>,
+    flag_uuid: Option<String>,
     flag_password_only: bool,
     flag_username_only: bool
 }
@@ -67,44 +77,65 @@ fn write_config_file(config: &keepasshttp::Config) {
     file.write_all(serde_json::to_string(&config).unwrap().as_bytes()).unwrap();
 }
 
-fn handle_entries(result: &Result<Vec<keepasshttp::Entry>, String>, args: &Args) {
-    let entries = result.as_ref().unwrap_or_else(|e| {
-        writeln!(io::stderr(), "Error - Server said: '{}'", e).unwrap();
-        process::exit(1);
-    });
-
-    match args.arg_index {
-        Some(index) => {
-            let entry = &entries.get(index as usize).unwrap_or_else(|| {
-                writeln!(io::stderr(), "Results did not contain an entry at index {}", index).unwrap();
-                process::exit(1);
-            });
-
-            if args.flag_username_only {
-                println!("{}", entry.login);
-            } else if args.flag_password_only {
-                println!("{}", entry.password);
-            } else {
-                println!("{}", entry);
-            }
-        },
-        None => {
-            for(i, entry) in entries.iter().enumerate() {
-                println!("{}: {}", i, entry);
-            }
-        }
+fn show_all(entries: &Vec<keepasshttp::Entry>) {
+    for(i, entry) in entries.iter().enumerate() {
+        println!("{}: {}", i, entry);
     }
 }
 
-fn get(args: &Args) {
+fn show_one(entries: &Vec<keepasshttp::Entry>, args: &Args) {
+    let entry = if args.flag_uuid.is_some() {
+        entry_by_uuid(entries, &args.flag_uuid.clone().unwrap())
+    } else if args.flag_index.is_some() {
+        entry_by_index(entries, &args.flag_index.clone().unwrap())
+    } else {
+        None
+    }.unwrap_or_else(|| {
+        process::exit(1);
+    });
+
+    if args.flag_password_only {
+        println!("{}", entry.password);
+    } else if args.flag_username_only {
+        println!("{}", entry.login);
+    } else {
+        println!("{}", entry);
+    }
+
+}
+
+fn entry_by_index<'a>(entries: &'a Vec<keepasshttp::Entry>, index: &usize) -> Option<&'a keepasshttp::Entry> {
+    let entry = entries.get(*index);
+
+    if entry.is_none() {
+        writeln!(io::stderr(), "Could not find an entry at index {}", index).unwrap();
+    }
+
+    entry
+}
+
+fn entry_by_uuid<'a, T: AsRef<str>>(entries: &'a Vec<keepasshttp::Entry>, uuid: T) -> Option<&'a keepasshttp::Entry> {
+    let entry = entries.iter().find(|e| e.uuid == uuid.as_ref());
+
+    if entry.is_none() {
+        writeln!(io::stderr(), "Could not find an entry with UUID {}", uuid.as_ref()).unwrap();
+    }
+
+    entry
+}
+
+fn get_entries<T: AsRef<str>>(search_string: T) -> Vec<keepasshttp::Entry> {
     let config = load_config().unwrap();
     let success = keepasshttp::test_associate(&config);
     if !success {
         writeln!(io::stderr(), "Config rejected by keepasshttp. Make sure that the correct database is open, or delete your config file ({}) and re-associate", config_path().to_string_lossy()).unwrap();
         process::exit(1);
     }
-    let entries = keepasshttp::get_logins(&config, &args.arg_search_string);
-    handle_entries(&entries, args);
+
+    keepasshttp::get_logins(&config, &search_string).unwrap_or_else(|e| {
+        writeln!(io::stderr(), "Error - Server said: '{}'", e).unwrap();
+        process::exit(1);
+    })
 }
 
 fn main() {
@@ -127,5 +158,12 @@ fn main() {
         write_config_file(&keepasshttp::associate().unwrap());
         writeln!(io::stderr(), "Config file written.").unwrap();
     }
-    get(&args);
+
+    let entries = get_entries(&args.arg_search_string);
+
+    if args.cmd_get {
+        show_all(&entries);
+    } else if args.cmd_get_one {
+        show_one(&entries, &args);
+    }
 }
