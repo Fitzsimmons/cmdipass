@@ -119,9 +119,6 @@ struct GetLoginsRequest {
     #[serde(rename = "RequestType")]
     request_type: String,
 
-    #[serde(rename = "SortSelection")]
-    sort_selection: String,
-
     #[serde(rename = "Id")]
     id: String,
 
@@ -146,7 +143,6 @@ impl GetLoginsRequest {
 
         GetLoginsRequest {
             request_type: String::from("get-logins"),
-            sort_selection: String::from("true"),
             nonce: base64::encode(&nonce),
             verifier: base64::encode(kphcrypto::encrypt(nonce_b64.as_bytes(), &key, &nonce).unwrap().as_slice()),
             id: config.id.to_owned(),
