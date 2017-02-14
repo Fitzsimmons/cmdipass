@@ -18,7 +18,7 @@ use std::error::Error;
 
 mod keepasshttp;
 
-const VERSION: &'static str = "0.1.0";
+const VERSION: &'static str = "0.1.1";
 const USAGE: &'static str = "
 cmdipass
 
