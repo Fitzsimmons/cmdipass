@@ -57,7 +57,7 @@ By default, `cmdipass` will write the configuration to `~/.cmdipass` after first
 
 ## Downloads
 
-I haven't published any binary releases yet, but I will soon! Until then, see the [Compiling from source](#compiling-from-source) secton.
+Binary releases are available at [https://github.com/Fitzsimmons/cmdipass/releases/](https://github.com/Fitzsimmons/cmdipass/releases/).
 
 ## Compiling from source
 
