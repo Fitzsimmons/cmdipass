@@ -51,6 +51,10 @@ Options:
   --username-only   Print only the username.
 ```
 
+## Config file
+
+By default, `cmdipass` will write the configuration to `~/.cmdipass` after first use. You can change the path of the config file by setting the `CMDIPASS_CONFIG` environment variable to a path of your choosing.
+
 ## Downloads
 
 I haven't published any binary releases yet, but I will soon! Until then, see the [Compiling from source](#compiling-from-source) secton.
