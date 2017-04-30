@@ -230,7 +230,7 @@ pub struct Config {
     pub id: String,
 }
 
-fn request<Req: serde::Serialize, Resp: serde::Deserialize>(request: &Req) -> Resp {
+fn request<Req: serde::Serialize, Resp: serde::de::DeserializeOwned>(request: &Req) -> Resp {
     let body = serde_json::to_string(&request).unwrap();
     debug!("{}", body);
     let client = Client::new();
