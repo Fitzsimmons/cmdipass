@@ -93,11 +93,15 @@ fn ensure_owner_readable_only(f: &File) -> io::Result<()> {
     }
 }
 
+#[cfg(any(not(unix)))]
+fn ensure_owner_readable_only(_: &File) -> io::Result<()> {
+    // TODO: Find out how to implement this on windows, if possible
+    Ok(())
+}
+
 fn load_config() -> io::Result<keepasshttp::Config> {
     let mut res = File::open(config_path())?;
-    if cfg!(any(unix)) {
-        ensure_owner_readable_only(&res)?;
-    }
+    ensure_owner_readable_only(&res)?;
     let mut buf = String::new();
     res.read_to_string(&mut buf)?;
 
