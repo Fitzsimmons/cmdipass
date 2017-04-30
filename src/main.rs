@@ -131,10 +131,8 @@ fn show_one(entries: &Vec<keepasshttp::Entry>, args: &Args) {
     } else if args.flag_index.is_some() {
         entry_by_index(entries, &args.flag_index.clone().unwrap())
     } else {
-        None
-    }.unwrap_or_else(|| {
-        process::exit(1);
-    });
+        unreachable!(); // docopt's command line validation should prevent the program from ever getting here
+    }.unwrap_or_else(|e| critical_error!("{}", e));
 
     if args.flag_password_only {
         println!("{}", entry.password);
@@ -146,24 +144,14 @@ fn show_one(entries: &Vec<keepasshttp::Entry>, args: &Args) {
 
 }
 
-fn entry_by_index<'a>(entries: &'a Vec<keepasshttp::Entry>, index: &usize) -> Option<&'a keepasshttp::Entry> {
+fn entry_by_index<'a>(entries: &'a Vec<keepasshttp::Entry>, index: &usize) -> io::Result<&'a keepasshttp::Entry> {
     let entry = entries.get(*index);
-
-    if entry.is_none() {
-        writeln!(io::stderr(), "Could not find an entry at index {}", index).unwrap();
-    }
-
-    entry
+    entry.ok_or(io::Error::new(io::ErrorKind::NotFound, format!("No entry found at index {}", index)))
 }
 
-fn entry_by_uuid<'a, T: AsRef<str>>(entries: &'a Vec<keepasshttp::Entry>, uuid: T) -> Option<&'a keepasshttp::Entry> {
+fn entry_by_uuid<'a, T: AsRef<str>>(entries: &'a Vec<keepasshttp::Entry>, uuid: T) -> io::Result<&'a keepasshttp::Entry> {
     let entry = entries.iter().find(|e| e.uuid == uuid.as_ref());
-
-    if entry.is_none() {
-        writeln!(io::stderr(), "Could not find an entry with UUID {}", uuid.as_ref()).unwrap();
-    }
-
-    entry
+    entry.ok_or(io::Error::new(io::ErrorKind::NotFound, format!("No entry found with UUID {}", uuid.as_ref())))
 }
 
 fn get_entries<T: AsRef<str>>(search_string: T) -> Vec<keepasshttp::Entry> {
