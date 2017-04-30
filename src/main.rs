@@ -62,8 +62,25 @@ fn config_exists() -> bool {
     config_path().as_path().exists()
 }
 
+#[cfg(any(unix))]
+fn ensure_owner_readable_only(f: &File) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let metadata = f.metadata()?;
+    let mode = metadata.permissions().mode();
+
+    if 0o077 & mode != 0 {
+        Err(io::Error::new(io::ErrorKind::Other,
+            format!("Permissions {:04o} on '{}' are too open.\nIt is recommended that your cmdipass config file is not accessible to others.", mode, config_path().to_string_lossy())))
+    } else {
+        Ok(())
+    }
+}
+
 fn load_config() -> io::Result<keepasshttp::Config> {
     let mut res = File::open(config_path())?;
+    if cfg!(any(unix)) {
+        ensure_owner_readable_only(&res)?;
+    }
     let mut buf = String::new();
     res.read_to_string(&mut buf)?;
 
@@ -133,7 +150,10 @@ fn entry_by_uuid<'a, T: AsRef<str>>(entries: &'a Vec<keepasshttp::Entry>, uuid: 
 }
 
 fn get_entries<T: AsRef<str>>(search_string: T) -> Vec<keepasshttp::Entry> {
-    let config = load_config().unwrap();
+    let config = load_config().unwrap_or_else(|e| {
+        writeln!(io::stderr(), "Could not load config:\n{}", e).unwrap();
+        process::exit(1);
+    });
     let success = keepasshttp::test_associate(&config);
     if !success {
         writeln!(io::stderr(), "Config rejected by keepasshttp. Make sure that the correct database is open, or delete your config file ({}) and re-associate", config_path().to_string_lossy()).unwrap();
