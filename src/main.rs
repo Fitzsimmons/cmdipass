@@ -13,10 +13,25 @@ extern crate env_logger;
 use std::{process, env};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
-use std::fs::File;
+use std::fs::{self, File};
 use std::error::Error;
 
 mod keepasshttp;
+
+macro_rules! critical_error {
+    ($fmt:expr) => {{
+        use std::io::{self, Write};
+        use std::process;
+        writeln!(io::stderr(), $fmt).unwrap();
+        process::exit(1);
+    }};
+    ($fmt:expr, $($arg:tt)*) => {{
+        use std::io::{self, Write};
+        use std::process;
+        writeln!(io::stderr(), $fmt, $($arg)*).unwrap();
+        process::exit(1);
+    }};
+}
 
 const VERSION: &'static str = "0.1.1";
 const USAGE: &'static str = "
@@ -62,8 +77,27 @@ fn config_exists() -> bool {
     config_path().as_path().exists()
 }
 
+#[cfg(any(unix))]
+fn ensure_owner_readable_only(f: &File) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let metadata = f.metadata()?;
+    let mode = metadata.permissions().mode();
+
+    if 0o077 & mode != 0 {
+        Err(io::Error::new(io::ErrorKind::Other,
+            format!("Permissions {:04o} on '{path}' are too open.\n\
+                It is recommended that your cmdipass config file is not accessible to others.\n\
+                Try using `chmod 0600 '{path}'` to solve this problem.", mode, path = config_path().to_string_lossy())))
+    } else {
+        Ok(())
+    }
+}
+
 fn load_config() -> io::Result<keepasshttp::Config> {
     let mut res = File::open(config_path())?;
+    if cfg!(any(unix)) {
+        ensure_owner_readable_only(&res)?;
+    }
     let mut buf = String::new();
     res.read_to_string(&mut buf)?;
 
@@ -72,8 +106,16 @@ fn load_config() -> io::Result<keepasshttp::Config> {
     Ok(config)
 }
 
+#[cfg(any(unix))]
 fn write_config_file(config: &keepasshttp::Config) {
-    let mut file = File::create(config_path()).unwrap();
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut file = fs::OpenOptions::new().write(true).create(true).mode(0o600).open(config_path()).unwrap();
+    file.write_all(serde_json::to_string(&config).unwrap().as_bytes()).unwrap();
+}
+
+#[cfg(any(not(unix)))]
+fn write_config_file(config: &keepasshttp::Config) {
+    let mut file = fs::OpenOptions::new().write(true).create(true).open(config_path()).unwrap();
     file.write_all(serde_json::to_string(&config).unwrap().as_bytes()).unwrap();
 }
 
@@ -89,10 +131,8 @@ fn show_one(entries: &Vec<keepasshttp::Entry>, args: &Args) {
     } else if args.flag_index.is_some() {
         entry_by_index(entries, &args.flag_index.clone().unwrap())
     } else {
-        None
-    }.unwrap_or_else(|| {
-        process::exit(1);
-    });
+        unreachable!(); // docopt's command line validation should prevent the program from ever getting here
+    }.unwrap_or_else(|e| critical_error!("{}", e));
 
     if args.flag_password_only {
         println!("{}", entry.password);
@@ -104,38 +144,26 @@ fn show_one(entries: &Vec<keepasshttp::Entry>, args: &Args) {
 
 }
 
-fn entry_by_index<'a>(entries: &'a Vec<keepasshttp::Entry>, index: &usize) -> Option<&'a keepasshttp::Entry> {
+fn entry_by_index<'a>(entries: &'a Vec<keepasshttp::Entry>, index: &usize) -> io::Result<&'a keepasshttp::Entry> {
     let entry = entries.get(*index);
-
-    if entry.is_none() {
-        writeln!(io::stderr(), "Could not find an entry at index {}", index).unwrap();
-    }
-
-    entry
+    entry.ok_or(io::Error::new(io::ErrorKind::NotFound, format!("No entry found at index {}", index)))
 }
 
-fn entry_by_uuid<'a, T: AsRef<str>>(entries: &'a Vec<keepasshttp::Entry>, uuid: T) -> Option<&'a keepasshttp::Entry> {
+fn entry_by_uuid<'a, T: AsRef<str>>(entries: &'a Vec<keepasshttp::Entry>, uuid: T) -> io::Result<&'a keepasshttp::Entry> {
     let entry = entries.iter().find(|e| e.uuid == uuid.as_ref());
-
-    if entry.is_none() {
-        writeln!(io::stderr(), "Could not find an entry with UUID {}", uuid.as_ref()).unwrap();
-    }
-
-    entry
+    entry.ok_or(io::Error::new(io::ErrorKind::NotFound, format!("No entry found with UUID {}", uuid.as_ref())))
 }
 
 fn get_entries<T: AsRef<str>>(search_string: T) -> Vec<keepasshttp::Entry> {
-    let config = load_config().unwrap();
+    let config = load_config().unwrap_or_else(|e| critical_error!("Could not load config:\n{}", e));
     let success = keepasshttp::test_associate(&config);
     if !success {
-        writeln!(io::stderr(), "Config rejected by keepasshttp. Make sure that the correct database is open, or delete your config file ({}) and re-associate", config_path().to_string_lossy()).unwrap();
-        process::exit(1);
+        critical_error!("Config rejected by keepasshttp. Make sure that the correct database is open, or delete your config file ({}) and re-associate", config_path().to_string_lossy());
     }
 
-    keepasshttp::get_logins(&config, &search_string).unwrap_or_else(|e| {
-        writeln!(io::stderr(), "Error - Server said: '{}'", e).unwrap();
-        process::exit(1);
-    })
+    keepasshttp::get_logins(&config, &search_string).unwrap_or_else(|e|
+        critical_error!("Error - Server said: '{}'", e)
+    )
 }
 
 fn main() {
