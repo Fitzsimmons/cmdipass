@@ -70,7 +70,9 @@ fn ensure_owner_readable_only(f: &File) -> io::Result<()> {
 
     if 0o077 & mode != 0 {
         Err(io::Error::new(io::ErrorKind::Other,
-            format!("Permissions {:04o} on '{}' are too open.\nIt is recommended that your cmdipass config file is not accessible to others.", mode, config_path().to_string_lossy())))
+            format!("Permissions {:04o} on '{path}' are too open.\n\
+                It is recommended that your cmdipass config file is not accessible to others.\n\
+                Try using `chmod 0600 '{path}'` to solve this problem.", mode, path = config_path().to_string_lossy())))
     } else {
         Ok(())
     }
