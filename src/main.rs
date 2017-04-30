@@ -14,7 +14,6 @@ use std::{process, env};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::fs::{self, File};
-use std::os::unix::fs::OpenOptionsExt;
 use std::error::Error;
 
 mod keepasshttp;
@@ -73,8 +72,16 @@ fn load_config() -> io::Result<keepasshttp::Config> {
     Ok(config)
 }
 
+#[cfg(any(unix))]
 fn write_config_file(config: &keepasshttp::Config) {
+    use std::os::unix::fs::OpenOptionsExt;
     let mut file = fs::OpenOptions::new().write(true).create(true).mode(0o600).open(config_path()).unwrap();
+    file.write_all(serde_json::to_string(&config).unwrap().as_bytes()).unwrap();
+}
+
+#[cfg(any(not(unix)))]
+fn write_config_file(config: &keepasshttp::Config) {
+    let mut file = fs::OpenOptions::new().write(true).create(true).open(config_path()).unwrap();
     file.write_all(serde_json::to_string(&config).unwrap().as_bytes()).unwrap();
 }
 
