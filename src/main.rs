@@ -18,6 +18,21 @@ use std::error::Error;
 
 mod keepasshttp;
 
+macro_rules! critical_error {
+    ($fmt:expr) => {{
+        use std::io::{self, Write};
+        use std::process;
+        writeln!(io::stderr(), $fmt).unwrap();
+        process::exit(1);
+    }};
+    ($fmt:expr, $($arg:tt)*) => {{
+        use std::io::{self, Write};
+        use std::process;
+        writeln!(io::stderr(), $fmt, $($arg)*).unwrap();
+        process::exit(1);
+    }};
+}
+
 const VERSION: &'static str = "0.1.1";
 const USAGE: &'static str = "
 cmdipass
@@ -152,20 +167,15 @@ fn entry_by_uuid<'a, T: AsRef<str>>(entries: &'a Vec<keepasshttp::Entry>, uuid: 
 }
 
 fn get_entries<T: AsRef<str>>(search_string: T) -> Vec<keepasshttp::Entry> {
-    let config = load_config().unwrap_or_else(|e| {
-        writeln!(io::stderr(), "Could not load config:\n{}", e).unwrap();
-        process::exit(1);
-    });
+    let config = load_config().unwrap_or_else(|e| critical_error!("Could not load config:\n{}", e));
     let success = keepasshttp::test_associate(&config);
     if !success {
-        writeln!(io::stderr(), "Config rejected by keepasshttp. Make sure that the correct database is open, or delete your config file ({}) and re-associate", config_path().to_string_lossy()).unwrap();
-        process::exit(1);
+        critical_error!("Config rejected by keepasshttp. Make sure that the correct database is open, or delete your config file ({}) and re-associate", config_path().to_string_lossy());
     }
 
-    keepasshttp::get_logins(&config, &search_string).unwrap_or_else(|e| {
-        writeln!(io::stderr(), "Error - Server said: '{}'", e).unwrap();
-        process::exit(1);
-    })
+    keepasshttp::get_logins(&config, &search_string).unwrap_or_else(|e|
+        critical_error!("Error - Server said: '{}'", e)
+    )
 }
 
 fn main() {
