@@ -13,7 +13,8 @@ extern crate env_logger;
 use std::{process, env};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
-use std::fs::File;
+use std::fs::{self, File};
+use std::os::unix::fs::OpenOptionsExt;
 use std::error::Error;
 
 mod keepasshttp;
@@ -73,7 +74,7 @@ fn load_config() -> io::Result<keepasshttp::Config> {
 }
 
 fn write_config_file(config: &keepasshttp::Config) {
-    let mut file = File::create(config_path()).unwrap();
+    let mut file = fs::OpenOptions::new().write(true).create(true).mode(0o600).open(config_path()).unwrap();
     file.write_all(serde_json::to_string(&config).unwrap().as_bytes()).unwrap();
 }
 
