@@ -186,9 +186,10 @@ fn main() {
     }
 
     if !config_exists() {
-        writeln!(io::stderr(), "Config file not found at '{}', generating new key and registering with server", config_path().to_string_lossy()).unwrap();
-        write_config_file(&keepasshttp::associate().unwrap());
-        writeln!(io::stderr(), "Config file written.").unwrap();
+        eprintln!("Config file not found at '{}'. Generating new key and registering with server.", config_path().to_string_lossy());
+        let config = keepasshttp::associate().unwrap_or_else(|e| critical_error!("{}", e));
+        write_config_file(&config);
+        eprintln!("Config file written.");
     }
 
     let entries = get_entries(&args.arg_search_string);
