@@ -1,4 +1,3 @@
-extern crate rustc_serialize;
 extern crate docopt;
 use docopt::Docopt;
 
@@ -54,7 +53,7 @@ Options:
   --username-only   Print only the username.
 ";
 
-#[derive(Debug, RustcDecodable)]
+#[derive(Debug, Deserialize)]
 struct Args {
     cmd_get: bool,
     cmd_get_one: bool,
@@ -173,7 +172,7 @@ fn get_entries<T: AsRef<str>>(search_string: T) -> Vec<keepasshttp::Entry> {
 }
 
 fn main() {
-    let args: Args = Docopt::new(USAGE).and_then(|d| d.decode()).unwrap_or_else(|e| e.exit());
+    let args: Args = Docopt::new(USAGE).and_then(|d| d.deserialize()).unwrap_or_else(|e| e.exit());
 
     env_logger::init().unwrap();
 
