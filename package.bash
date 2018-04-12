@@ -24,6 +24,6 @@ if [ "$OS" == "Windows_NT" ]; then
 	7z a -mx=1 ../../package/cmdipass-$version-$triple.zip cmdipass.exe*
 	popd
 else
-	zip -j -1 package/cmdipass-$version-$triple.zip target/debug/cmdipass*
+	zip -j -1 package/cmdipass-$version-$triple.zip target/debug/cmdipass target/debug/cmdipass.sig.pgp target/debug/cmdipass.sig.saltpack
 fi
 

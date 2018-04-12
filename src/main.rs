@@ -32,8 +32,7 @@ macro_rules! critical_error {
     }};
 }
 
-// build.rs reads the current version number from Cargo.toml and writes a const assignment to cargo-version.rs
-include!(concat!(env!("OUT_DIR"), "/cargo-version.rs"));
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 const USAGE: &'static str = "
 cmdipass
