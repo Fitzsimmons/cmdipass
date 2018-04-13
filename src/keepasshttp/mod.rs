@@ -5,8 +5,12 @@ use self::rand::{ Rng, OsRng };
 
 use std::path::PathBuf;
 use std::fs::{self, File};
-use std::error::Error;
+use std::io::{self, Read, Write};
 use std::env;
+use std::fmt;
+use std::process;
+use std::error::Error;
+use error::CmdipassError;
 
 use keepass::{KeePassBackend, Entry};
 
@@ -18,10 +22,6 @@ extern crate serde_json;
 extern crate hyper;
 use self::hyper::{Client, status};
 use self::hyper::header::{ContentType, Accept};
-
-use std::io::{self, Read, Write};
-use std::fmt;
-use std::process;
 
 #[derive(Serialize, Debug)]
 struct TestAssociateRequest {
@@ -62,13 +62,13 @@ struct TestAssociateResponse {
     success: bool,
 }
 
-pub fn test_associate(config: &Config) -> Result<(), String> {
+pub fn test_associate(config: &Config) -> Result<(), Box<Error>> {
     let req = TestAssociateRequest::new(config);
     let test_associate_response: TestAssociateResponse = request(&req);
 
     match test_associate_response.success {
         true => Ok(()),
-        false => Err(format!("Config rejected by keepasshttp. Make sure that the correct database is open, or delete your config file ({}) and re-associate", config_path().to_string_lossy()))
+        false => Err(Box::new(CmdipassError::new(format!("Config rejected by keepasshttp. Make sure that the correct database is open, or delete your config file ({}) and re-associate", config_path().to_string_lossy()))))
     }
 }
 
@@ -115,13 +115,13 @@ pub struct AssociateResponse {
     pub id: Option<String>,
 }
 
-pub fn associate() -> Result<Config, String> {
+pub fn associate() -> Result<Config, Box<Error>> {
     let associate_request = AssociateRequest::new();
     let associate_response: AssociateResponse = request(&associate_request);
 
     match associate_response.success {
         true => Ok(Config { key: associate_request.key.to_owned(), id: associate_response.id.unwrap().to_owned() }),
-        false => Err(String::from("Association request did not succeed. User canceled, or protocol error."))
+        false => Err(Box::new(CmdipassError::new("Association request did not succeed. User canceled, or protocol error.")))
     }
 }
 
@@ -209,7 +209,7 @@ impl RawEntry {
     }
 }
 
-pub fn get_logins<T: AsRef<str>>(config: &Config, url: T) -> Result<Vec<Entry>, String> {
+pub fn get_logins<T: AsRef<str>>(config: &Config, url: T) -> Result<Vec<Entry>, Box<Error>> {
     let get_logins_request = GetLoginsRequest::new(config, url);
     let get_logins_response: GetLoginsResponse = request(&get_logins_request);
 
@@ -217,7 +217,11 @@ pub fn get_logins<T: AsRef<str>>(config: &Config, url: T) -> Result<Vec<Entry>, 
         true => {
             Ok(get_logins_response.entries.iter().map(|re| re.decrypt(&config.key, &get_logins_response.nonce)).collect())
         },
-        false => Err(format!("Couldn't get logins. Server said: '{}'", get_logins_response.error.unwrap()))
+        false => Err(
+            Box::new(
+                CmdipassError::new(format!("Couldn't get logins. Server said: '{}'", get_logins_response.error.unwrap()))
+            )
+        )
     }
 }
 
@@ -277,33 +281,33 @@ fn config_exists() -> bool {
 }
 
 #[cfg(any(unix))]
-fn ensure_owner_readable_only(f: &File) -> Result<(), String> {
+fn ensure_owner_readable_only(f: &File) -> Result<(), Box<Error>> {
     use std::os::unix::fs::PermissionsExt;
-    let metadata = f.metadata().map_err(|e| e.description().to_owned())?;
+    let metadata = f.metadata()?;
     let mode = metadata.permissions().mode();
 
     if 0o077 & mode != 0 {
-        Err(format!("Permissions {:04o} on '{path}' are too open.\n\
+        Err(Box::new(CmdipassError::new(format!("Permissions {:04o} on '{path}' are too open.\n\
                 It is recommended that your cmdipass config file is not accessible to others.\n\
-                Try using `chmod 0600 '{path}'` to solve this problem.", mode, path = config_path().to_string_lossy()))
+                Try using `chmod 0600 '{path}'` to solve this problem.", mode, path = config_path().to_string_lossy()))))
     } else {
         Ok(())
     }
 }
 
 #[cfg(any(not(unix)))]
-fn ensure_owner_readable_only(_: &File) -> io::Result<()> {
+fn ensure_owner_readable_only(_: &File) -> Result<(), Box<Error>> {
     // TODO: Find out how to implement this on windows, if possible
     Ok(())
 }
 
-fn load_config() -> Result<Config, String> {
-    let mut res = File::open(config_path()).map_err(|e| e.description().to_owned())?;
+fn load_config() -> Result<Config, Box<Error>> {
+    let mut res = File::open(config_path())?;
     ensure_owner_readable_only(&res)?;
     let mut buf = String::new();
-    res.read_to_string(&mut buf).map_err(|e| e.description().to_owned())?;
+    res.read_to_string(&mut buf)?;
 
-    let config: Config = serde_json::from_str(buf.as_str()).map_err(|e| e.description().to_owned())?;
+    let config: Config = serde_json::from_str(buf.as_str())?;
 
     test_associate(&config)?;
 
@@ -311,16 +315,18 @@ fn load_config() -> Result<Config, String> {
 }
 
 #[cfg(any(unix))]
-fn write_config_file(config: &Config) -> Result<(), String> {
+fn write_config_file(config: &Config) -> Result<(), Box<Error>> {
     use std::os::unix::fs::OpenOptionsExt;
-    let mut file = fs::OpenOptions::new().write(true).create(true).mode(0o600).open(config_path()).map_err(|e| e.description().to_owned())?;
-    Ok(file.write_all(serde_json::to_string(&config).map_err(|e| e.description().to_owned())?.as_bytes()).map_err(|e| e.description().to_owned())?)
+    let mut file = fs::OpenOptions::new().write(true).create(true).mode(0o600).open(config_path())?;
+    file.write_all(serde_json::to_string(&config)?.as_bytes())?;
+    Ok(())
 }
 
 #[cfg(any(not(unix)))]
 fn write_config_file(config: &keepasshttp::Config) -> Result<(), String> {
     let mut file = fs::OpenOptions::new().write(true).create(true).open(config_path())?;
     file.write_all(serde_json::to_string(&config)?.as_bytes())?;
+    Ok(())
 }
 
 pub struct KeePassHttp {
@@ -328,13 +334,13 @@ pub struct KeePassHttp {
 }
 
 impl KeePassBackend for KeePassHttp {
-    fn get_entries(&self, search_string: &str) -> Result<Vec<Entry>, String> {
+    fn get_entries(&self, search_string: &str) -> Result<Vec<Entry>, Box<Error>> {
         get_logins(&self.config, &search_string)
     }
 }
 
 impl KeePassHttp {
-    pub fn new() -> Result<KeePassHttp, String> {
+    pub fn new() -> Result<KeePassHttp, Box<Error>> {
         let config: Config = match config_exists() {
             true => load_config()?,
             false => {

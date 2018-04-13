@@ -1,3 +1,5 @@
+use std::error::Error;
+
 #[derive(Debug)]
 pub struct Entry {
     pub login: String,
@@ -7,5 +9,5 @@ pub struct Entry {
 }
 
 pub trait KeePassBackend {
-    fn get_entries(&self, search_string: &str) -> Result<Vec<Entry>, String>;
+    fn get_entries(&self, search_string: &str) -> Result<Vec<Entry>, Box<Error>>;
 }

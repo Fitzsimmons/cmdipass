@@ -18,6 +18,8 @@ use keepasshttp::KeePassHttp;
 mod keepass;
 use keepass::{KeePassBackend, Entry};
 
+mod error;
+
 macro_rules! critical_error {
     ($fmt:expr) => {{
         use std::process;
