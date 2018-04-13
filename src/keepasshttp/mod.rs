@@ -5,10 +5,9 @@ use self::rand::{ Rng, OsRng };
 
 use std::path::PathBuf;
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::env;
 use std::fmt;
-use std::process;
 use std::error::Error;
 use error::CmdipassError;
 
@@ -64,7 +63,7 @@ struct TestAssociateResponse {
 
 pub fn test_associate(config: &Config) -> Result<(), Box<Error>> {
     let req = TestAssociateRequest::new(config);
-    let test_associate_response: TestAssociateResponse = request(&req);
+    let test_associate_response: TestAssociateResponse = request(&req)?;
 
     match test_associate_response.success {
         true => Ok(()),
@@ -117,7 +116,7 @@ pub struct AssociateResponse {
 
 pub fn associate() -> Result<Config, Box<Error>> {
     let associate_request = AssociateRequest::new();
-    let associate_response: AssociateResponse = request(&associate_request);
+    let associate_response: AssociateResponse = request(&associate_request)?;
 
     match associate_response.success {
         true => Ok(Config { key: associate_request.key.to_owned(), id: associate_response.id.unwrap().to_owned() }),
@@ -211,7 +210,7 @@ impl RawEntry {
 
 pub fn get_logins<T: AsRef<str>>(config: &Config, url: T) -> Result<Vec<Entry>, Box<Error>> {
     let get_logins_request = GetLoginsRequest::new(config, url);
-    let get_logins_response: GetLoginsResponse = request(&get_logins_request);
+    let get_logins_response: GetLoginsResponse = request(&get_logins_request)?;
 
     match get_logins_response.success {
         true => {
@@ -237,7 +236,7 @@ pub struct Config {
     pub id: String,
 }
 
-fn request<Req: serde::Serialize, Resp: serde::de::DeserializeOwned>(request: &Req) -> Resp {
+fn request<Req: serde::Serialize, Resp: serde::de::DeserializeOwned>(request: &Req) -> Result<Resp, Box<Error>> {
     let body = serde_json::to_string(&request).unwrap();
     debug!("{}", body);
     let client = Client::new();
@@ -245,10 +244,11 @@ fn request<Req: serde::Serialize, Resp: serde::de::DeserializeOwned>(request: &R
         header(ContentType::json()).
         header(Accept::json()).
         body(body.as_str()).
-        send().unwrap_or_else(|e| {
-            writeln!(io::stderr(), "Error while trying to contact KeePassHttp: {}\nMake sure that KeePass is running and the database is unlocked.", e).unwrap();
-            process::exit(1);
-        });
+        send().map_err(|e|
+            Box::new(CmdipassError::new(
+                format!("Error while trying to contact KeePassHttp: {}\nMake sure that KeePass is running and the database is unlocked.", e))
+            )
+        )?;
 
     debug!("{:?}", res);
     match res.status {
@@ -258,12 +258,9 @@ fn request<Req: serde::Serialize, Resp: serde::de::DeserializeOwned>(request: &R
             debug!("{}", buf);
 
             let response: Resp = serde_json::from_str(buf.as_str()).unwrap();
-            response
+            Ok(response)
         },
-        _ => {
-            writeln!(io::stderr(), "Error while trying to contact KeePassHttp: {}\nMake sure that KeePass is running and the database is unlocked.",  res.status).unwrap();
-            process::exit(1);
-        }
+        _ => Err(Box::new(CmdipassError::new(format!("Error while trying to contact KeePassHttp: {}\nMake sure that KeePass is running and the database is unlocked.", res.status))))
     }
 }
 
