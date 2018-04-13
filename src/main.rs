@@ -102,18 +102,6 @@ fn entry_by_uuid<'a, T: AsRef<str>>(entries: &'a Vec<Entry>, uuid: T) -> io::Res
     entry.ok_or(io::Error::new(io::ErrorKind::NotFound, format!("No entry found with UUID {}", uuid.as_ref())))
 }
 
-// fn get_entries<T: AsRef<str>>(search_string: T) -> Vec<Entry> {
-//     let config = load_config().unwrap_or_else(|e| critical_error!("Could not load config:\n{}", e));
-//     let success = keepasshttp::test_associate(&config);
-//     if !success {
-//         critical_error!("Config rejected by keepasshttp. Make sure that the correct database is open, or delete your config file ({}) and re-associate", config_path().to_string_lossy());
-//     }
-
-//     keepasshttp::get_logins(&config, &search_string).unwrap_or_else(|e|
-//         critical_error!("Error - Server said: '{}'", e)
-//     )
-// }
-
 fn main() {
     let args: Args = Docopt::new(USAGE).and_then(|d| d.deserialize()).unwrap_or_else(|e| e.exit());
 
@@ -135,7 +123,7 @@ fn main() {
         false => Box::new(KeePassHttp::new().unwrap_or_else(|e| critical_error!("{}", e)))
     };
 
-    let entries = keepass_backend.get_entries(&args.arg_search_string);
+    let entries = keepass_backend.get_entries(&args.arg_search_string).unwrap_or_else(|e| critical_error!("{}", e));
 
     if args.cmd_get {
         show_all(&entries);

@@ -7,5 +7,5 @@ pub struct Entry {
 }
 
 pub trait KeePassBackend {
-    fn get_entries(&self, search_string: &str) -> Vec<Entry>;
+    fn get_entries(&self, search_string: &str) -> Result<Vec<Entry>, String>;
 }
