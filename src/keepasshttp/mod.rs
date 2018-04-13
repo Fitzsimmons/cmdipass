@@ -3,6 +3,13 @@ mod kphcrypto;
 extern crate rand;
 use self::rand::{ Rng, OsRng };
 
+use std::path::PathBuf;
+use std::fs::{self, File};
+use std::error::Error;
+use std::env;
+
+use keepass::{KeePassBackend, Entry};
+
 extern crate base64;
 
 extern crate serde;
@@ -104,13 +111,13 @@ pub struct AssociateResponse {
     pub id: Option<String>,
 }
 
-pub fn associate() -> Result<Config, String> {
+pub fn associate() -> io::Result<Config> {
     let associate_request = AssociateRequest::new();
     let associate_response: AssociateResponse = request(&associate_request);
 
     match associate_response.success {
         true => Ok(Config { key: associate_request.key.to_owned(), id: associate_response.id.unwrap().to_owned() }),
-        false => Err(String::from("Association request did not succeed. User canceled, or protocol error."))
+        false => Err(io::Error::new(io::ErrorKind::Other, String::from("Association request did not succeed. User canceled, or protocol error.")))
     }
 }
 
@@ -210,14 +217,6 @@ pub fn get_logins<T: AsRef<str>>(config: &Config, url: T) -> Result<Vec<Entry>, 
     }
 }
 
-#[derive(Debug)]
-pub struct Entry {
-    pub login: String,
-    pub name: String,
-    pub password: String,
-    pub uuid: String,
-}
-
 impl fmt::Display for Entry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Name: {} || Login: {} || Password: {} || UUID: {}", self.name, self.login, self.password, self.uuid)
@@ -257,5 +256,91 @@ fn request<Req: serde::Serialize, Resp: serde::de::DeserializeOwned>(request: &R
             writeln!(io::stderr(), "Error while trying to contact KeePassHttp: {}\nMake sure that KeePass is running and the database is unlocked.",  res.status).unwrap();
             process::exit(1);
         }
+    }
+}
+
+
+fn config_path() -> PathBuf {
+    env::var("CMDIPASS_CONFIG").map(|e| PathBuf::from(e)).unwrap_or_else(|_| {
+        let mut pathbuf = env::home_dir().unwrap_or(PathBuf::from(""));
+        pathbuf.push(".cmdipass");
+        pathbuf
+    })
+}
+
+fn config_exists() -> bool {
+    config_path().as_path().exists()
+}
+
+#[cfg(any(unix))]
+fn ensure_owner_readable_only(f: &File) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let metadata = f.metadata()?;
+    let mode = metadata.permissions().mode();
+
+    if 0o077 & mode != 0 {
+        Err(io::Error::new(io::ErrorKind::Other,
+            format!("Permissions {:04o} on '{path}' are too open.\n\
+                It is recommended that your cmdipass config file is not accessible to others.\n\
+                Try using `chmod 0600 '{path}'` to solve this problem.", mode, path = config_path().to_string_lossy())))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(any(not(unix)))]
+fn ensure_owner_readable_only(_: &File) -> io::Result<()> {
+    // TODO: Find out how to implement this on windows, if possible
+    Ok(())
+}
+
+fn load_config() -> io::Result<Config> {
+    let mut res = File::open(config_path())?;
+    ensure_owner_readable_only(&res)?;
+    let mut buf = String::new();
+    res.read_to_string(&mut buf)?;
+
+    let config: Config = serde_json::from_str(buf.as_str())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Invalid JSON: {}", e.description())))?;
+    Ok(config)
+}
+
+#[cfg(any(unix))]
+fn write_config_file(config: &Config) -> io::Result<()> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut file = fs::OpenOptions::new().write(true).create(true).mode(0o600).open(config_path())?;
+    Ok(file.write_all(serde_json::to_string(&config)?.as_bytes())?)
+}
+
+#[cfg(any(not(unix)))]
+fn write_config_file(config: &keepasshttp::Config) -> io::Result<()> {
+    let mut file = fs::OpenOptions::new().write(true).create(true).open(config_path())?;
+    file.write_all(serde_json::to_string(&config)?.as_bytes())?;
+}
+
+pub struct KeePassHttp {
+    config: Config,
+}
+
+impl KeePassBackend for KeePassHttp {
+    fn get_entries(&self, search_string: &str) -> Vec<Entry> {
+        unimplemented!()
+    }
+}
+
+impl KeePassHttp {
+
+    pub fn new() -> io::Result<KeePassHttp> {
+        let config: Config = match config_exists() {
+            true => load_config()?,
+            false => {
+                eprintln!("Config file not found at '{}'. Generating new key and registering with server.", config_path().to_string_lossy());
+                let config = associate()?;
+                write_config_file(&config)?;
+                eprintln!("Config file written.");
+                config
+            }
+        };
+        Ok(KeePassHttp { config: config })
     }
 }
