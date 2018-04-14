@@ -4,7 +4,6 @@ version = "0.2.0"
 authors = ["Justin Fitzsimmons <justinf@nulogy.com>"]
 license = "GPL-3.0"
 
-
 [dependencies]
 docopt = "0.8"
 hyper = "0.10"

@@ -254,10 +254,10 @@ fn request<Req: serde::Serialize, Resp: serde::de::DeserializeOwned>(request: &R
     match res.status {
         status::StatusCode::Ok => {
             let mut buf = String::new();
-            res.read_to_string(&mut buf).unwrap();
+            res.read_to_string(&mut buf)?;
             debug!("{}", buf);
 
-            let response: Resp = serde_json::from_str(buf.as_str()).unwrap();
+            let response: Resp = serde_json::from_str(buf.as_str())?;
             Ok(response)
         },
         _ => Err(Box::new(CmdipassError::new(format!("Error while trying to contact KeePassHttp: {}\nMake sure that KeePass is running and the database is unlocked.", res.status))))
