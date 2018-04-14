@@ -15,8 +15,13 @@ use std::io;
 mod keepasshttp;
 use keepasshttp::KeePassHttp;
 
+mod keepassxcbrowser;
+use keepassxcbrowser::KeePassXCBrowser;
+
 mod keepass;
 use keepass::{KeePassBackend, Entry};
+
+mod config_file;
 
 mod error;
 
@@ -120,8 +125,7 @@ fn main() {
     }
 
     let keepass_backend: Box<KeePassBackend> = match args.flag_xc {
-        // true => KeePassXC::new(),
-        true => unimplemented!(),
+        true => Box::new(KeePassXCBrowser::new().unwrap_or_else(|e| critical_error!("{}", e))),
         false => Box::new(KeePassHttp::new().unwrap_or_else(|e| critical_error!("{}", e)))
     };
 
