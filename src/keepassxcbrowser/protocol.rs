@@ -33,13 +33,13 @@ struct AssociateResponse {
 #[derive(Debug, Serialize)]
 struct AssociateRequest {
     action: String,
-    #[serde(serialize_with = "serialize_public_key")]
-    key: box_::PublicKey,
+    #[serde(serialize_with = "serialize_public_key", rename = "key")]
+    our_public_key: box_::PublicKey,
 }
 
 impl AssociateRequest {
     fn new(our_public_key: &box_::PublicKey) -> AssociateRequest {
-        AssociateRequest { action: String::from("associate"), key: our_public_key.clone() }
+        AssociateRequest { action: String::from("associate"), our_public_key: our_public_key.clone() }
     }
 }
 
@@ -74,6 +74,8 @@ trait Request: serde::Serialize {
 
 fn encrypted_request<Req, Resp>(session: &Session, request: &Req) -> Result<Resp, Box<Error>>
     where Req: Request, Resp: serde::de::DeserializeOwned {
+
+    // refactor into two functions?
     let nonce = box_::gen_nonce();
     let serialized_plaintext = serde_json::to_string(&request)?;
     let encrypted_message = box_::seal(serialized_plaintext.as_bytes(), &nonce, &session.server_public_key, &session.our_secret_key);
@@ -88,8 +90,13 @@ fn encrypted_request<Req, Resp>(session: &Session, request: &Req) -> Result<Resp
 
     let encrypted_response: EncryptedResponse = raw_request(&encrypted_request)?;
 
-    let raw_ciphertext = base64::decode(&encrypted_response.message)?;
-    let raw_plaintext = String::from_utf8(box_::open(&raw_ciphertext, &encrypted_response.nonce, &session.server_public_key, &session.our_secret_key)
+    if encrypted_response.error.is_some() {
+        let failure_details = encrypted_response.error.unwrap();
+        return Err(Box::new(CmdipassError::new(format!("{} action failed: {}", encrypted_request.action, failure_details))));
+    }
+
+    let raw_ciphertext = base64::decode(&encrypted_response.message.unwrap())?;
+    let raw_plaintext = String::from_utf8(box_::open(&raw_ciphertext, &encrypted_response.nonce.unwrap(), &session.server_public_key, &session.our_secret_key)
         .map_err(|_| CmdipassError::new("Verification of server message failed. Broken protocol implementation or interception attempt has occurred."))?)?;
 
     debug!("Decrypted plaintext: {}", raw_plaintext);
@@ -101,9 +108,10 @@ fn encrypted_request<Req, Resp>(session: &Session, request: &Req) -> Result<Resp
 #[derive(Debug, Deserialize)]
 struct EncryptedResponse {
     action: String,
-    message: String,
-    #[serde(deserialize_with = "deserialize_nonce")]
-    nonce: box_::Nonce,
+    error: Option<String>,
+    message: Option<String>,
+    #[serde(deserialize_with = "deserialize_optional_nonce", default)]
+    nonce: Option<box_::Nonce>,
 }
 
 #[derive(Debug, Serialize)]
@@ -151,7 +159,7 @@ impl Serialize for ClientId {
 
 fn get_server_public_key(our_public_key: &box_::PublicKey, client_id: &ClientId) -> Result<box_::PublicKey, Box<Error>> {
     let req = ChangePublicKeysRequest::new(our_public_key, client_id);
-    let resp: ChangePublicKeysResp = raw_request(&req)?;
+    let resp: ChangePublicKeysResponse = raw_request(&req)?;
     let server_public_key = box_::PublicKey::from_slice(base64::decode(&resp.public_key)?.as_slice()).ok_or(
         Box::new(CmdipassError::new("Could not parse server's public key: incorrect size")))?;
 
@@ -177,11 +185,25 @@ fn serialize_nonce<S>(nonce: &box_::Nonce, serializer: S) -> Result<S::Ok, S::Er
     serializer.serialize_str(base64::encode(nonce.as_ref()).as_str())
 }
 
-fn deserialize_nonce<'de, D>(d: D) -> Result<box_::Nonce, D::Error> where D: Deserializer<'de> {
+fn deserialize_optional_nonce<'de, D>(d: D) -> Result<Option<box_::Nonce>, D::Error> where D: Deserializer<'de> {
     use self::serde::de::Error;
-    let raw = base64::decode(&String::deserialize(d)?).map_err(|e| D::Error::custom(format!("{}", e)))?;
-    box_::Nonce::from_slice(&raw).ok_or(D::Error::custom("Failed to parse nonce from server: incorrect size"))
+
+    let option: Option<String> = Option::deserialize(d)?;
+    let nonce_option = match option {
+        Some(s) => {
+            let raw = base64::decode(&s).map_err(|e| D::Error::custom(format!("{}", e)))?;
+            Some(box_::Nonce::from_slice(&raw).ok_or(D::Error::custom("Failed to parse nonce from server: incorrect size"))?)
+        },
+        None => None
+    };
+    Ok(nonce_option)
 }
+
+// fn deserialize_nonce<'de, D>(d: D) -> Result<box_::Nonce, D::Error> where D: Deserializer<'de> {
+//     use self::serde::de::Error;
+//     let raw = base64::decode(&String::deserialize(d)?).map_err(|e| D::Error::custom(format!("{}", e)))?;
+//     box_::Nonce::from_slice(&raw).ok_or(D::Error::custom("Failed to parse nonce from server: incorrect size"))
+// }
 
 impl ChangePublicKeysRequest {
     pub fn new(our_public_key: &box_::PublicKey, client_id: &ClientId) -> ChangePublicKeysRequest {
@@ -197,7 +219,30 @@ impl ChangePublicKeysRequest {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct ChangePublicKeysResp {
+struct ChangePublicKeysResponse {
     #[serde(rename = "publicKey")]
     pub public_key: String,
+}
+
+#[derive(Serialize, Debug)]
+struct TestAssociateRequest {
+    action: String,
+    id: ClientId,
+    #[serde(serialize_with = "serialize_public_key", rename = "key")]
+    our_public_key: box_::PublicKey,
+}
+
+impl TestAssociateRequest {
+    pub fn new(session: &Session) -> TestAssociateRequest {
+        TestAssociateRequest { action: String::from("associate"), id: session.client_id.clone(), our_public_key: session.our_secret_key.public_key() }
+    }
+}
+
+#[derive(Deserialize, Debug)]
+struct TestAssociateResponse {
+    success: String,
+}
+
+impl TestAssociateResponse {
+
 }

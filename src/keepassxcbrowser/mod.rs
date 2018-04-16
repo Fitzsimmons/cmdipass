@@ -12,14 +12,12 @@ extern crate sodiumoxide;
 use self::sodiumoxide::crypto::box_;
 
 use keepass::{KeePassBackend, Entry};
-use config_file::{config_exists, load_config, config_path};
+use config_file::{config_exists, load_config, config_path, write_config_file};
 
 mod protocol;
 use self::protocol::Session;
 
 mod proxy_socket;
-
-pub struct KeePassXCBrowser;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
@@ -41,23 +39,20 @@ fn register() -> Result<Config, Box<Error>> {
     let config = protocol::associate(&session)?;
 
     debug!("{:?}", config);
-    // write_config_file(&config)?;
-    // eprintln!("Config file written.");
+    write_config_file(&config)?;
+    eprintln!("Config file written.");
 
+    Ok(config)
+}
 
-    // config;
-
-
-    // generate keypair
-    // change public keys with server
-    // associate
-    // persist
-    // return Config
+fn test_associate(config: &Config) -> Result<protocol::Session, Box<Error>> {
+    
+    
     unimplemented!()
 }
 
-fn test_associate(config: &Config) -> Result<(), Box<Error>> {
-    unimplemented!()
+pub struct KeePassXCBrowser {
+    session: protocol::Session,
 }
 
 impl KeePassXCBrowser {
@@ -68,8 +63,9 @@ impl KeePassXCBrowser {
             true => load_config()?,
             false => register()?
         };
-        // Ok(KeePassXCBrowser { config: config });
-        unimplemented!()
+
+        let session = test_associate(&config)?;
+        Ok(KeePassXCBrowser { session: session })
     }
 }
 

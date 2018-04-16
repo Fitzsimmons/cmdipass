@@ -24,6 +24,7 @@ use std::os::unix::net::UnixStream;
 
 #[cfg(windows)]
 extern crate named_pipe;
+#[cfg(windows)]
 use self::named_pipe::PipeClient;
 
 pub struct ProxySocket<T> {
