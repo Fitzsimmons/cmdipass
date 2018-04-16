@@ -18,6 +18,8 @@ use self::sodiumoxide::crypto::box_;
 use keepassxcbrowser::proxy_socket;
 use keepassxcbrowser::Config;
 
+use keepass;
+
 pub fn associate(session: &Session) -> Result<Config, Box<Error>> {
     let request = AssociateRequest::new(&session.our_secret_key.public_key());
     let response: AssociateResponse = encrypted_request(session, &request)?;
@@ -78,6 +80,7 @@ fn encrypted_request<Req, Resp>(session: &Session, request: &Req) -> Result<Resp
     // refactor into two functions?
     let nonce = box_::gen_nonce();
     let serialized_plaintext = serde_json::to_string(&request)?;
+    debug!("Seralized plaintext: {}", serialized_plaintext);
     let encrypted_message = box_::seal(serialized_plaintext.as_bytes(), &nonce, &session.server_public_key, &session.our_secret_key);
     let escaped_ciphertext = base64::encode(&encrypted_message);
 
@@ -199,12 +202,6 @@ fn deserialize_optional_nonce<'de, D>(d: D) -> Result<Option<box_::Nonce>, D::Er
     Ok(nonce_option)
 }
 
-// fn deserialize_nonce<'de, D>(d: D) -> Result<box_::Nonce, D::Error> where D: Deserializer<'de> {
-//     use self::serde::de::Error;
-//     let raw = base64::decode(&String::deserialize(d)?).map_err(|e| D::Error::custom(format!("{}", e)))?;
-//     box_::Nonce::from_slice(&raw).ok_or(D::Error::custom("Failed to parse nonce from server: incorrect size"))
-// }
-
 impl ChangePublicKeysRequest {
     pub fn new(our_public_key: &box_::PublicKey, client_id: &ClientId) -> ChangePublicKeysRequest {
         let nonce = box_::gen_nonce();
@@ -224,25 +221,65 @@ struct ChangePublicKeysResponse {
     pub public_key: String,
 }
 
+pub fn test_associate(config: &Config) -> Result<Session, Box<Error>> {
+    let session = Session::new(config.our_secret_key.clone())?;
+    let req = TestAssociateRequest::new(config);
+    let _resp: TestAssociateResponse = encrypted_request(&session, &req)?;
+
+    Ok(session)
+}
+
 #[derive(Serialize, Debug)]
 struct TestAssociateRequest {
     action: String,
-    id: ClientId,
+    id: String,
     #[serde(serialize_with = "serialize_public_key", rename = "key")]
     our_public_key: box_::PublicKey,
 }
 
 impl TestAssociateRequest {
-    pub fn new(session: &Session) -> TestAssociateRequest {
-        TestAssociateRequest { action: String::from("associate"), id: session.client_id.clone(), our_public_key: session.our_secret_key.public_key() }
+    pub fn new(config: &Config) -> TestAssociateRequest {
+        TestAssociateRequest { action: String::from("test-associate"), id: config.id.clone(), our_public_key: config.our_secret_key.public_key() }
+    }
+}
+
+impl Request for TestAssociateRequest {
+    fn action(&self) -> String {
+        self.action.clone()
     }
 }
 
 #[derive(Deserialize, Debug)]
 struct TestAssociateResponse {
-    success: String,
+    id: String,
 }
 
-impl TestAssociateResponse {
+#[derive(Serialize, Debug)]
+struct GetEntriesRequest {
+    action: String,
+    url: String,
+}
 
+#[derive(Deserialize, Debug)]
+struct GetEntriesResponse {
+    entries: Vec<keepass::Entry>
+}
+
+pub fn get_entries(session: &Session, search_string: &str) -> Result<Vec<keepass::Entry>, Box<Error>> {
+    let req = GetEntriesRequest::new(search_string);
+    let resp: GetEntriesResponse = encrypted_request(session, &req)?;
+
+    Ok(resp.entries)
+}
+
+impl GetEntriesRequest {
+    pub fn new(search_string: &str) -> GetEntriesRequest {
+        GetEntriesRequest { action: String::from("get-logins"), url: String::from(search_string) }
+    }
+}
+
+impl Request for GetEntriesRequest {
+    fn action(&self) -> String {
+        self.action.clone()
+    }
 }

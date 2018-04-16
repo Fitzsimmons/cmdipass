@@ -1,6 +1,6 @@
 use std::error::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct Entry {
     pub login: String,
     pub name: String,

@@ -18,8 +18,7 @@ pub fn config_path() -> PathBuf {
 }
 
 pub fn config_exists() -> bool {
-    false
-    // config_path().as_path().exists()
+    config_path().as_path().exists()
 }
 
 #[cfg(any(unix))]
@@ -50,8 +49,6 @@ pub fn load_config<Config: serde::de::DeserializeOwned>() -> Result<Config, Box<
     res.read_to_string(&mut buf)?;
 
     let config: Config = serde_json::from_str(buf.as_str())?;
-
-    // test_associate(&config)?;
 
     Ok(config)
 }

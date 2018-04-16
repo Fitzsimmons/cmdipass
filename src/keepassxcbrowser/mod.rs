@@ -21,14 +21,14 @@ mod proxy_socket;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
-    secret_key: box_::SecretKey,
+    our_secret_key: box_::SecretKey,
     id: String,
     backend_type: String,
 }
 
 impl Config {
     fn new(secret_key: box_::SecretKey, id: String) -> Config {
-        Config { secret_key: secret_key, id: id, backend_type: String::from("KeePassXC-Browser") }
+        Config { our_secret_key: secret_key, id: id, backend_type: String::from("KeePassXC-Browser") }
     }
 }
 
@@ -45,12 +45,6 @@ fn register() -> Result<Config, Box<Error>> {
     Ok(config)
 }
 
-fn test_associate(config: &Config) -> Result<protocol::Session, Box<Error>> {
-    
-    
-    unimplemented!()
-}
-
 pub struct KeePassXCBrowser {
     session: protocol::Session,
 }
@@ -64,13 +58,13 @@ impl KeePassXCBrowser {
             false => register()?
         };
 
-        let session = test_associate(&config)?;
+        let session = protocol::test_associate(&config)?;
         Ok(KeePassXCBrowser { session: session })
     }
 }
 
 impl KeePassBackend for KeePassXCBrowser {
     fn get_entries(&self, search_string: &str) -> Result<Vec<Entry>, Box<Error>> {
-        Ok(vec![])
+        protocol::get_entries(&self.session, search_string)
     }
 }
