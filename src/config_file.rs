@@ -65,7 +65,7 @@ pub fn write_config_file<Config: serde::Serialize>(config: &Config) -> Result<()
 }
 
 #[cfg(any(not(unix)))]
-pub fn write_config_file<Config: serde::Serialize>(config: &keepasshttp::Config) -> Result<(), String> {
+pub fn write_config_file<Config: serde::Serialize>(config: &Config) -> Result<(), Box<Error>> {
     let mut file = fs::OpenOptions::new().write(true).create(true).open(config_path())?;
     file.write_all(serde_json::to_string(&config)?.as_bytes())?;
     Ok(())

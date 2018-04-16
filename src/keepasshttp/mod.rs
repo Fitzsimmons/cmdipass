@@ -264,7 +264,6 @@ fn request<Req: serde::Serialize, Resp: serde::de::DeserializeOwned>(request: &R
     }
 }
 
-
 fn config_path() -> PathBuf {
     env::var("CMDIPASS_CONFIG").map(|e| PathBuf::from(e)).unwrap_or_else(|_| {
         let mut pathbuf = env::home_dir().unwrap_or(PathBuf::from(""));
@@ -320,7 +319,7 @@ fn write_config_file(config: &Config) -> Result<(), Box<Error>> {
 }
 
 #[cfg(any(not(unix)))]
-fn write_config_file(config: &keepasshttp::Config) -> Result<(), String> {
+fn write_config_file(config: &Config) -> Result<(), Box<Error>> {
     let mut file = fs::OpenOptions::new().write(true).create(true).open(config_path())?;
     file.write_all(serde_json::to_string(&config)?.as_bytes())?;
     Ok(())

@@ -16,3 +16,6 @@ serde_json = "1.0"
 log = "0.4"
 env_logger = "0.3"
 sodiumoxide = "0.0.16"
+
+[target.'cfg(windows)'.dependencies]
+named_pipe = "0.3"

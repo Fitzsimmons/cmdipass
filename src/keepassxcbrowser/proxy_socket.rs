@@ -23,7 +23,8 @@ use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
 
 #[cfg(windows)]
-use named_pipe::PipeClient;
+extern crate named_pipe;
+use self::named_pipe::PipeClient;
 
 pub struct ProxySocket<T> {
 	inner: T,
@@ -47,8 +48,8 @@ impl<W: Write> Write for ProxySocket<W> {
 
 #[cfg(windows)]
 pub fn connect() -> io::Result<ProxySocket<PipeClient>> {
-	let username = env::var("USERNAME").unwrap();
-	let pipe_name = format!("\\\\.\\pipe\\keepassxc\\{}\\kpxc_server", username);
+	let localappdata = env::var("LOCALAPPDATA").unwrap();
+	let pipe_name = format!("\\\\.\\pipe\\{}\\Temp\\kpxc_server", localappdata);
 	let client = PipeClient::connect(pipe_name)?;
 	Ok(ProxySocket { inner: client })
 }
